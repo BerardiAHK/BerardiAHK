@@ -1,0 +1,310 @@
+#IfWinActive GTA:SA:MP
+SendMode Input
+#UseHook
+#NoEnv
+#SingleInstance, force
+#Include SAMP.ahk
+
+global ScriptVersion, ScriptVersion = "1.0" ; Версия данного скрипта
+global UrlServerInfo, UrlServerInfo = "https://raw.githubusercontent.com/MrGPro/TestUpdate/master/LST_Version.ini" ; Ссылка на файл с версией, ссылкой на файл, описанием, и лог изменений
+ScriptDir := A_ScriptDir
+
+Utf8ToAnsi(ByRef Utf8String, CodePage = 1251)
+{
+    If (NumGet(Utf8String) & 0xFFFFFF) = 0xBFBBEF
+        BOM = 3
+    Else
+        BOM = 0
+
+    UniSize := DllCall("MultiByteToWideChar", "UInt", 65001, "UInt", 0
+                    , "UInt", &Utf8String + BOM, "Int", -1
+                    , "Int", 0, "Int", 0)
+    VarSetCapacity(UniBuf, UniSize * 2)
+    DllCall("MultiByteToWideChar", "UInt", 65001, "UInt", 0
+                    , "UInt", &Utf8String + BOM, "Int", -1
+                    , "UInt", &UniBuf, "Int", UniSize)
+
+    AnsiSize := DllCall("WideCharToMultiByte", "UInt", CodePage, "UInt", 0
+                    , "UInt", &UniBuf, "Int", -1
+                    , "Int", 0, "Int", 0
+                    , "Int", 0, "Int", 0)
+    VarSetCapacity(AnsiString, AnsiSize)
+    DllCall("WideCharToMultiByte", "UInt", CodePage, "UInt", 0
+                    , "UInt", &UniBuf, "Int", -1
+                    , "Str", AnsiString, "Int", AnsiSize
+                    , "Int", 0, "Int", 0)
+    Return AnsiString
+}
+
+ConnectedToInternet(flag=0x40) ; интернет коннектор статус сети
+{
+Return DllCall("Wininet.dll\InternetGetConnectedState", "Str", flag,"Int",0)
+}
+
+if ConnectedToInternet() ; есть подключение к сети
+{
+SplashTextOn, , 60, Менеджер обновлений, Проверка обновления`n------------------------`nОжидайте 
+URLDownloadToFile, %UrlServerInfo%, %ScriptDir%/LST_Version.ini
+FileRead, find404, %ScriptDir%/LST_Version.ini ; проверяем файл на строку 404
+IfInString, find404, 404
+{
+    FileServer := False ; файл настроек не верный
+}
+else
+{
+    FileServer := True ; файл настроек верный
+    IniRead, f_LastVersion, %ScriptDir%/LST_Version.ini, Script, Last_Version
+    IniRead, f_LastDescription, %ScriptDir%/LST_Version.ini, Script, Last_Description
+    IniRead, f_LastChangLog, %ScriptDir%/LST_Version.ini, Script, Last_Changlog
+    If (f_LastChangLog != Null) ; если ссылка на файл лога не пуста
+    {
+  URLDownloadToFile, %f_LastChangLog%, %ScriptDir%/Chatlog.txt ; скачиваем файл лога
+  FileRead, f_ChatlogText, %ScriptDir%/Chatlog.txt ; читаем файл лога
+  conv_MsgChangLog := Utf8ToAnsi(f_ChatlogText) ; конвертируем кодировку
+  If (conv_MsgChangLog == "ERROR") ; если файл пустой
+  {
+   FormChatLogLoad := ; записываем пустоту в форму
+  }
+  else
+  {
+   FormChatLogLoad := conv_MsgChangLog ; записываем текст с файла в форму
+  }
+    }
+}
+if (FileServer == False) ; если в файле есть 404
+{
+    SplashTextOn, , 60, Менеджер обновлений, Ошибка подключения`n------------------------`nНет связи с сервером
+    sleep, 2000
+    SplashTextoff
+    goto, Script
+}
+else if (f_LastVersion > ScriptVersion and f_LastVersion != Null) ; версия больше и последняя версия не равна пустоте
+{
+    SplashTextOn, , 60, Менеджер обновлений,  Ожидайте`n------------------------`nОбнаружена версия %f_LastVersion%
+    sleep, 2000
+    SplashTextoff
+    IniRead, f_LastChangLog, %ScriptDir%/LST_Version.ini, Script, Last_Changlog
+  ; удаляем иконку с формы
+  Gui +LastFound
+  DllCall("uxtheme\SetWindowThemeAttribute", "ptr", WinExist()
+  , "int", 1, "int64*", 6 | 6<<32, "uint", 8)
+  
+  ; загружаем форму
+  Gui, Update:Color, FFFFFF
+  Gui, Update:-MinimizeBox
+  Gui, Update:Add, TreeView, x240 y375 w240 h84, 
+  Gui, Update:Add, Edit, x10 y10 w480 h240 ReadOnly, %FormChatLogLoad%
+  Gui, Update:Add, Button, x90 y260 w125 h30 gUpdate, Обновить
+  Gui, Update:Add, Button, x285 y260 w125 h30 gUpdateGuiClose, Отмена
+  Gui, Update:Show, w500 h300, Доступно обновление %ScriptVersion% до %f_LastVersion%
+  return
+    }
+}
+else ; нет доступа к интернету
+{
+    MsgBox, 48, Менеджер обновлений, Доступ к интернету не обнаружен`n-----------------------------------------`nПроверьте своё интернет соединение
+    goto, Script
+}
+
+; запускаем обновление по тыку кнопки обновить
+Update:
+IniRead, f_LastDownload, %ScriptDir%/LST_Version.ini, Script, Last_Download
+IniRead, f_FileName, %ScriptDir%/LST_Version.ini, Script, Last_Name
+msgbox, 1, Обновление до %f_LastVersion%, Хотите ли Вы обновиться?
+IfMsgBox, OK
+{
+    SplashTextOn, , 60 ,Менеджер обновлений, Ожидайте`n------------------------`nОбновляем до %f_LastVersion%
+    sleep, 1000
+    SplashTextOn, , 60,Менеджер обновлений, Ожидайте`n------------------------`nСкачиваем обновление
+    URLDownloadToFile, %f_LastDownload%, %ScriptDir%/%f_FileName%
+    sleep, 1000
+    SplashTextOn, , 60,Менеджер обновлений, Ожидайте`n------------------------`nЗапускаем скрипт
+    sleep, 3000
+    run, %ScriptDir%/%f_FileName%
+    ExitApp
+  
+}
+IfMsgBox, CANCEL
+{
+    Gui, Update:Destroy ; удаляем форму обновления
+    goto, Script
+}
+return
+
+UpdateGuiClose:
+Gui, Update:Destroy
+goto, Script
+return
+
+; ваш скрипт
+Script:
+MsgBox, Скрипт запущен
+ExitApp
+
+:?:/berardi::
+sleep 250
+ShowDialog("0", "BerardiAHK | {8470FF}FamilyBerardi", "{FFFFFF}Узнать администраторов онлайн{8470FF} /admins`n{FFFFFF}Для отправки объявлений о наборе{8470FF} /nabor`n{FFFFFF}Рассказать информацию для новобранцев {8470FF}/info`n`n{FFFFFF}Для личных целей`n{FFFFFF}/lockrp {8470FF}| Role-play Открытие/закрытие личного транспорта`n{FFFFFF}F5 {8470FF}| Узнать время без ввода команды /time + Скриншот`n`n{FFFFFF}Для собеседования`n{FFFFFF}ALT + 1 {8470FF}| Здравствуйте, вы на собеседование?`n{FFFFFF}ALT + 2 {8470FF}| Хорошо, предъявите паспорт, лицензии и трудовую книжку. | (/n /pass | /lic | /joblist)`n{FFFFFF}ALT + 3 {8470FF}| Отлично, вы готовы пройти психологический тест?`n{FFFFFF}ALT + 4 {8470FF}| Что у меня под ногами?`n{FFFFFF}ALT + 5 {8470FF}| Отлично, ваш ответ был верный. | Присядьте.`n{FFFFFF}ALT + 6 {8470FF}| /n Встанешь - дам Зама! | /n Встань, дам 5.000$ | Встаньте.`n{FFFFFF}ALT + 7 {8470FF}| /n RP MG SK in /n | /n RP MG SK in /n`n{FFFFFF}ALT + 8 {8470FF}| Вы нам подходите!`n{FFFFFF}ALT + 9 {8470FF}| /me достал форму и бейджик из шкафа | /do Форма и бейджик в руке. | /me передал форму и бейджик человеку напротив`n{FFFFFF}ALT + 0 {8470FF}| К сожалению, вы нам не подходите.`n`n{FFFFFF}Автор скрипта: Lorenzo_Berardi`nСтатус версии скрипта - {008000}Обновлено", "Закрыть")
+return
+
+:?:/lockrp::
+sleep 100
+SendMessage, 0x50,, 0x4190419,, A
+Sendinput, {F6}/me движением руки достал из кармана ключи от автомобиля{ENTER}
+sleep 1100
+Sendinput, {F6}/do Ключи от автомобиля в руке у Берарди.{ENTER}
+sleep 1100
+Sendinput, {F6}/lock{ENTER}
+return
+
+:?:/nabor::
+sleep 100
+SendMessage, 0x50,, 0x4190419,, A
+Sendinput, {F6}/ad{ENTER}
+sleep 1000
+Sendinput, {ENTER}
+sleep 500
+Sendinput, Проходит собеседование в ресторан 'New Italy'. Мы в навигаторе 4-6{ENTER}
+sleep 500
+Sendinput, {ENTER}
+
+sleep 1000
+Sendinput, {F6}/ad{ENTER}
+sleep 1000
+Sendinput, {DOWN}{ENTER}
+sleep 500
+Sendinput, Проходит собеседование в ресторан 'New Italy'. Мы в навигаторе 4-6{ENTER}
+sleep 500
+Sendinput, {ENTER}
+
+sleep 1000
+Sendinput, {F6}/ad{ENTER}
+sleep 1000
+Sendinput, {DOWN 2}{ENTER}
+sleep 500
+Sendinput, Проходит собеседование в ресторан 'New Italy'. Мы в навигаторе 4-6{ENTER}
+sleep 500
+Sendinput, {ENTER}
+return
+
+:?:/info::
+sleep 100
+SendMessage, 0x50,, 0x4190419,, A
+Sendinput, {F6}/fn 1. Всю подробную инф. о повышениях вы найдете на форуме.{ENTER}
+sleep 1000
+Sendinput, {F6}/fn 2. Обязательно чекайте FAQ. За незнание FAQ вы будете наказаны.{ENTER}
+sleep 1000
+Sendinput, {F6}/fn 3. Grand-rp.su>>Saturn>>Мафии>>Сицилия{ENTER}
+sleep 1000
+Sendinput, {F6}/fn 4. Пароль от приватного раздела: only_for_familia{ENTER}
+sleep 1000
+Sendinput, {F6}/fn 5. В FAQ вы будете прикрыватся: Вместо 'ПТ'-Перец. и т.д.{ENTER}
+sleep 1000
+Sendinput, {F6}/fn 6. Связь с нами: http://discord.gg/J953W{ENTER}
+sleep 1000
+Sendinput, {F6}/fn 7. Просить ПТ нельзя, мы их продаем 1 пт=10${ENTER}
+sleep 1000
+return
+
+F5::
+sleep 250
+SendMessage, 0x50,, 0x4190419,, A
+SendInput, {F6}/me посмотрел на часы с гравировкой "Berardi"{ENTER}
+sleep 1000
+SendInput, {F6}/time{ENTER}
+sleep 100
+SendInput, {F8}
+return
+
+!1::
+sleep 100
+SendMessage, 0x50,, 0x4190419,,
+Sendinput, {F6}Здравствуйте, вы на собеседование?{ENTER}
+return
+
+!2::
+sleep 100
+SendMessage, 0x50,, 0x4190419,, A
+Sendinput, {F6}Хорошо, предъявите паспорт, лицензии и трудовую книжку.{ENTER}
+sleep 1100
+Sendinput, {F6}/n /pass <id>, /lic <id>, /joblist <id>{ENTER}
+return
+
+!3::
+sleep 100
+SendMessage, 0x50,, 0x4190419,, A
+Sendinput, {F6}Отлично, вы готовы пройти психологический тест?{ENTER}
+return
+
+!4::
+sleep 100
+SendMessage, 0x50,, 0x4190419,, A
+Sendinput, {F6}Что у меня над головой?{ENTER}
+return
+
+!5::
+sleep 100
+SendMessage, 0x50,, 0x4190419,, A
+Sendinput, {F6}Отлично, ваш ответ верный.{ENTER}
+sleep 1000
+Sendinput, {F6}Присядьте.{ENTER}
+return
+
+!6::
+sleep 100
+SendMessage, 0x50,, 0x4190419,, A
+Sendinput, {F6}/n встанешь, дам 5.000${ENTER}
+sleep 4000
+Sendinput, {F6}Встаньте.{ENTER}
+return
+
+!7::
+sleep 100
+SendMessage, 0x50,, 0x4190419,, A
+Sendinput, {F6}/n RP MG SK in /n{ENTER}
+sleep 1100
+Sendinput, {F6}/n RP MG SK in /n{ENTER}
+return
+
+!8::
+sleep 100
+SendMessage, 0x50,, 0x4190419,,
+Sendinput, {F6}Поздравляю, вы приняты{ENTER}
+return
+
+!9::
+sleep 100
+SendMessage, 0x50,, 0x4190419,, A
+Sendinput, {F6}/do Пакет с формой в руке.{ENTER}
+sleep 1500
+Sendinput, {F6}/me передал пакет и бейджик человеку напротив{ENTER}
+sleep 1500
+Sendinput, {F6}Добро пожаловать, рады вас видеть{ENTER}
+return
+
+!0::
+sleep 100
+SendMessage, 0x50,, 0x4190419,, A
+Sendinput, {F6}К сожалению, вы нам не подходите.{ENTER}
+return
+
+:?:/admins::
+sleep 100
+IfNotExist, admins_online.txt
+FileAppend,,admins_online.txt
+fstring := ""
+Loop, read, admins_online.txt
+{
+StringReplace, Nick, A_LoopReadLine,%A_SPACE%,, All
+if(StrLen(Nick) = 0)  
+continue
+id := getPlayerIdByName(Nick)
+if(id = -1)
+continue
+fstring := fstring . getPlayerNameById(id) . "[" . id . "]`n"
+ShowDialog("0", "BerardiAHK | {8470FF}Admin's online", fstring, "Закрыть")
+}
+if fstring = ;
+{
+ShowDialog("0", "BerardiAHK | {8470FF}Admin's online", "Администраторов нету в сети.", "Закрыть")
+}
+return
