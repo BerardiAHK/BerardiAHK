@@ -5,8 +5,8 @@ SendMode Input
 #SingleInstance, force
 #Include SAMP.ahk
 
-global ScriptVersion, ScriptVersion = "1.0" ; Версия данного скрипта
-global UrlServerInfo, UrlServerInfo = "https://raw.githubusercontent.com/MrGPro/TestUpdate/master/LST_Version.ini" ; Ссылка на файл с версией, ссылкой на файл, описанием, и лог изменений
+global ScriptVersion, ScriptVersion = "1" ; Версия данного скрипта
+global UrlServerInfo, UrlServerInfo = "https://github.com/BerardiAHK/BerardiAHK/raw/master/LST_Version.ini" ; Ссылка на файл с версией, ссылкой на файл, описанием, и лог изменений
 ScriptDir := A_ScriptDir
 
 Utf8ToAnsi(ByRef Utf8String, CodePage = 1251)
